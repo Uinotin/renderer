@@ -34,6 +34,8 @@ PFN_vkGetDeviceQueue pfnGetDeviceQueue;
 PFN_vkQueueSubmit pfnQueueSubmit;
 PFN_vkQueuePresentKHR pfnQueuePresentKHR;
 PFN_vkQueueWaitIdle pfnQueueWaitIdle;
+PFN_vkBeginCommandBuffer pfnBeginCommandBuffer;
+PFN_vkGetPhysicalDeviceSurfaceSupportKHR pfnGetPhysicalDeviceSurfaceSupportKHR;
 VkRenderPass createRenderPass(VkDevice device, const VkAllocationCallbacks * allocator);
 VkInstance getFunctionPointers(void);
 void * allocator(void *, size_t size, size_t alignment, VkSystemAllocationScope);
@@ -147,6 +149,8 @@ VkInstance getFunctionPointers(void)
   pfnQueueSubmit = (PFN_vkQueueSubmit)glfwGetInstanceProcAddress(instance, "vkQueueSubmit");
   pfnQueuePresentKHR = (PFN_vkQueuePresentKHR)glfwGetInstanceProcAddress(instance, "vkQueuePresentKHR");
   pfnQueueWaitIdle = (PFN_vkQueueWaitIdle)glfwGetInstanceProcAddress(instance, "vkQueueWaitIdle");
+  pfnBeginCommandBuffer = (PFN_vkBeginCommandBuffer)glfwGetInstanceProcAddress(instance, "vkBeginCommandBuffer");
+  pfnGetPhysicalDeviceSurfaceSupportKHR = (PFN_vkGetPhysicalDeviceSurfaceSupportKHR)glfwGetInstanceProcAddress(instance, "vkGetPhysicalDeviceSurfaceSupportKHR");;
   return instance;
 
 }
@@ -156,13 +160,13 @@ VkRenderPass createRenderPass(VkDevice device, const VkAllocationCallbacks *allo
   uint32_t nAttachments = 1;
   const VkAttachmentDescription attachmentDescriptions[] = {{VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
 							     VK_FORMAT_B8G8R8A8_UNORM,
-							     VK_SAMPLE_COUNT_8_BIT,
+							     VK_SAMPLE_COUNT_1_BIT,
 							     VK_ATTACHMENT_LOAD_OP_CLEAR,
 							     VK_ATTACHMENT_STORE_OP_STORE,
 							     VK_ATTACHMENT_LOAD_OP_CLEAR,
 							     VK_ATTACHMENT_STORE_OP_STORE,
-                                                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+                                                             VK_IMAGE_LAYOUT_UNDEFINED,
+                                                             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}};
   const VkAttachmentReference attachmentReference = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
   uint32_t nSubpasses = 1;
 
@@ -247,6 +251,13 @@ int main(void)
 
   VkInstance instance = getFunctionPointers();
 
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  GLFWwindow * window = glfwCreateWindow(400, 400, "asdf", NULL, NULL);
+  VkSurfaceKHR surface;
+  if (VK_SUCCESS == glfwCreateWindowSurface(instance, window, NULL, &surface))
+    printf("Window creation succeeded\n");
+
   uint32_t nPhysicalDevices = 32;
   VkPhysicalDevice physicalDevice[32];
   if (VK_SUCCESS != pfnEnumeratePhysicalDevices(instance, &nPhysicalDevices, physicalDevice))
@@ -260,12 +271,14 @@ int main(void)
   int hasPresentationQueue = 0;
   int hasGraphicsQueue = 0;
   for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-    if (!glfwGetPhysicalDevicePresentationSupport(instance, *physicalDevice, i))
-      printf("WOOT\n");
-    else {
+    VkBool32 support;
+    pfnGetPhysicalDeviceSurfaceSupportKHR(*physicalDevice, i, surface, &support);
+    if (glfwGetPhysicalDevicePresentationSupport(instance, *physicalDevice, i) && support) {
       printf("Supports Graphics\n");
       presentationQueue = i;
       hasPresentationQueue = 1;
+    } else {
+      printf("WOOT\n");
     }
     if (queueFamilyProperties[i].queueCount > 0 && queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
       graphicsQueue = i;
@@ -276,9 +289,11 @@ int main(void)
 
   VkPhysicalDeviceFeatures physicalDeviceFeatures;
   pfnGetPhysicalDeviceFeatures(*physicalDevice, &physicalDeviceFeatures);
-  uint32_t nDeviceQueueCreateInfos = 2;
 
   const float priority = 0.9f;
+  uint32_t nDeviceQueueCreateInfos = 2;
+  if (presentationQueue == graphicsQueue)
+    nDeviceQueueCreateInfos = 1;
   const VkDeviceQueueCreateInfo deviceQueueCreateInfo[] = {
     {
       VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -319,16 +334,10 @@ int main(void)
   pfnGetDeviceQueue(device, presentationQueue, 0, &presentationQueueHandle);
   pfnGetDeviceQueue(device, graphicsQueue, 0, &graphicsQueueHandle);
 
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  GLFWwindow * window = glfwCreateWindow(400, 400, "asdf", NULL, NULL);
-  VkSurfaceKHR surface;
-  if (VK_SUCCESS == glfwCreateWindowSurface(instance, window, NULL, &surface))
-    printf("Window creation succeeded\n");
 
   const VkCommandPoolCreateInfo commandPoolCreateInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 							 NULL,
-							 0,
+							 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
                                                          graphicsQueue};
   VkCommandPool commandPool;
   if (VK_SUCCESS == pfnCreateCommandPool(device, &commandPoolCreateInfo, &allocationCallbacks, &commandPool))
@@ -355,7 +364,7 @@ int main(void)
 							NULL,
 							0,
 							surface,
-							1,
+							2,
 							surfaceFormats->format,
 							surfaceFormats->colorSpace,
 							{400,400},
@@ -571,14 +580,13 @@ int main(void)
   };
 
   VkDynamicState dynamicStates[] = {
-    VK_DYNAMIC_STATE_VIEWPORT,
     VK_DYNAMIC_STATE_LINE_WIDTH
   };
   VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
       NULL,
       0,
-      sizeof(dynamicStates),
+      1,
       dynamicStates
   };
 
@@ -638,9 +646,15 @@ int main(void)
   else printf("Semaphore creation succeeded\n");
 
   pfnResetCommandPool(device, commandPool, 0);
-  VkClearColorValue clearColorValue = {{0.0f, 0.0f, 0.0f, 1.0f}};
+  VkClearColorValue clearColorValue = {{1.0f, 0.0f, 0.0f, 1.0f}};
   VkClearValue clearColor;
   clearColor.color = clearColorValue;
+  VkCommandBufferBeginInfo commandBufferBeginInfo = {
+    VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    0,
+    VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+    NULL
+  };
   VkRenderPassBeginInfo renderPassBeginInfo = {
     VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
     NULL,
@@ -652,6 +666,8 @@ int main(void)
   };
   for (uint32_t i = 0; i < nImages; ++i) {
     renderPassBeginInfo.framebuffer = framebuffers[i];
+
+    pfnBeginCommandBuffer(primaryCommandBuffers[i], &commandBufferBeginInfo);
     pfnCmdBeginRenderPass(primaryCommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     pfnCmdBindPipeline(primaryCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     pfnCmdDraw(primaryCommandBuffers[i], 3, 1, 0, 0);
