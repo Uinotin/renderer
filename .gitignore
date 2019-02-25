@@ -62,3 +62,6 @@ compile_commands.json
 *.ii
 *.s
 *.swp
+*~
+*.spv
+*.i
