@@ -4,33 +4,33 @@
 
 typedef struct SwapchainIn
 {
-  VulkanContext context;
-  WindowSize windowSize;
-  int shouldClose;
+  int var2;
+  WindowSize var1;
+  VulkanContext var0;
 } SwapchainIn;
 
-static void CreateSwapchain(Node * node)
+void CreateSwapchain(Node * node)
 {
   SwapchainIn * in = (SwapchainIn *)node->locals;
   VulkanSwapchain * out = (VulkanSwapchain *)node->out;
-  if (in->shouldClose) {
+  if (in->var2) {
     for (uint32_t i = 0; i < out->numImageViews; ++i)
       if (out->imageView[i] != VK_NULL_HANDLE)
-	pfnDestroyImageView(in->context.device, out->imageView[i], NULL);
+	pfnDestroyImageView(in->var0.device, out->imageView[i], NULL);
     if (out->handle != VK_NULL_HANDLE)
-      pfnDestroySwapchainKHR(in->context.device, out->handle, NULL);
+      pfnDestroySwapchainKHR(in->var0.device, out->handle, NULL);
     return;
   }
   VkSurfaceCapabilitiesKHR surfaceCapabilities;
-  pfnGetPhysicalDeviceSurfaceCapabilitiesKHR(in->context.physicalDevice,
-					     in->context.surface,
+  pfnGetPhysicalDeviceSurfaceCapabilitiesKHR(in->var0.physicalDevice,
+					     in->var0.surface,
 					     &surfaceCapabilities);
   VkSurfaceFormatKHR surfaceFormat;
   surfaceFormat.format = VK_FORMAT_UNDEFINED;
   VkSurfaceFormatKHR surfaceFormats[255];
   uint32_t nSurfaceFormats = sizeof(surfaceFormats)/sizeof(surfaceFormats[0]);
-  pfnGetPhysicalDeviceSurfaceFormatsKHR(in->context.physicalDevice,
-					in->context.surface,
+  pfnGetPhysicalDeviceSurfaceFormatsKHR(in->var0.physicalDevice,
+					in->var0.surface,
 					&nSurfaceFormats,
 					surfaceFormats);
   if (nSurfaceFormats == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED) {
@@ -50,11 +50,11 @@ static void CreateSwapchain(Node * node)
     VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
     NULL,
     0,
-    in->context.surface,
+    in->var0.surface,
     2,
     surfaceFormat.format,
     surfaceFormat.colorSpace,
-    {in->windowSize.width, in->windowSize.height},
+    {in->var1.width, in->var1.height},
     1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
     VK_SHARING_MODE_EXCLUSIVE,
@@ -68,7 +68,7 @@ static void CreateSwapchain(Node * node)
   };
 
   if (VK_SUCCESS !=
-      pfnCreateSwapchainKHR(in->context.device,
+      pfnCreateSwapchainKHR(in->var0.device,
 			    &swapchainCreateInfo,
 			    NULL,
 			    &(out->handle)))
@@ -78,7 +78,7 @@ static void CreateSwapchain(Node * node)
   out->numImageViews = 8;
   VkImage images[8];
 
-  pfnGetSwapchainImagesKHR(in->context.device,
+  pfnGetSwapchainImagesKHR(in->var0.device,
 			   out->handle,
 			   &(out->numImageViews),
 			   images);
@@ -108,29 +108,18 @@ static void CreateSwapchain(Node * node)
 
   for (uint32_t i = 0; i < out->numImageViews; ++i) {
     imageViewCreateInfo.image = images[i];
-    if (pfnCreateImageView && VK_SUCCESS != pfnCreateImageView(in->context.device, &imageViewCreateInfo, NULL, out->imageView + i))
+    if (pfnCreateImageView && VK_SUCCESS != pfnCreateImageView(in->var0.device, &imageViewCreateInfo, NULL, out->imageView + i))
       printf("Image view creation failed.\n");
     else printf("Image view creation succeeded\n");
   }
 }
 
-uint32_t InitSwapchain(Node * node,
-		       char ** memory,
-		       void ** childOutData,
-		       void ** childInitPrograms,
-		       void * out)
+size_t InitSwapchain(size_t * childOutData)
 {
-  *memory -= sizeof(SwapchainIn);
-  node->locals = *memory;
-  SwapchainIn * in = (SwapchainIn *)node->locals;
-  in->shouldClose = 0;
-  childOutData[0] = &(in->context);
-  childOutData[1] = &(in->windowSize);
-  childOutData[2] = &(in->shouldClose);
-  node->out = out;
-
-  node->update = &CreateSwapchain;
-  
-  return 2;
+  /// todo: Make a macro for this
+  childOutData[0] = offsetof(SwapchainIn, var0);
+  childOutData[1] = offsetof(SwapchainIn, var1);
+  childOutData[2] = offsetof(SwapchainIn, var2);
+  return sizeof(SwapchainIn);
 }
 

@@ -160,7 +160,6 @@ int InitGraphics(VulkanContext * context)
     return 0;
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   context->window = glfwCreateWindow(400, 400, "Demo", NULL, NULL);
   if (context->window &&
       VK_SUCCESS == glfwCreateWindowSurface(context->instance,
@@ -173,7 +172,6 @@ int InitGraphics(VulkanContext * context)
     return 0;
   }
 
-  EventInit(&resizeEvent, "resize", sizeof(WindowSize));
   glfwSetWindowSizeCallback(context->window, &WindowSizeCallback);
 
   uint32_t presentationQueue = 0;

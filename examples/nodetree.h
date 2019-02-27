@@ -39,7 +39,7 @@
 typedef struct NodeTree
 {
   Node * firstLeafNode;
-  int isDirty[MAXNUMTREENODES];
+  int * firstLeafNodeDepth;
   int depths[MAXNUMTREENODES];
 
   Node nodes[MAXNUMTREENODES];
@@ -52,8 +52,8 @@ typedef struct NodeTree
 } NodeTree;
 
 void LoadNodeTree(NodeTree * nodeTree,
-		  InitProgram InitRootNode,
-		  uint32_t outDataSize,
+		  const char * filename,
+		  size_t outDataSize,
 		  Event ** events,
 		  uint32_t numEvents);
 

@@ -12,10 +12,7 @@ typedef struct VulkanSwapchain
   uint32_t numImageViews;
 } VulkanSwapchain;
 
-uint32_t InitSwapchain(Node * node,
-		       char ** memory,
-		       void ** childOutData,
-		       void ** updateProgram,
-		       void * out);
+size_t InitSwapchain(size_t * childOutData);
+void CreateSwapchain(Node * node);
 
 #endif /// VULKANSWAPCHAIN_H

@@ -4,7 +4,7 @@
 
 void NodeEventCallback(void * node, const void * eventData, uint32_t dataSize)
 {
-  NodeListener * nodeListener = (NodeListener *)node;
-  memcpy(nodeListener->nodeIn, eventData, dataSize);
-  *(nodeListener->isDirty) = 1;
+  Node * listenerNode = (Node *)node;
+  memcpy(listenerNode->out, eventData, dataSize);
+  listenerNode->isDirty = 1;
 }
