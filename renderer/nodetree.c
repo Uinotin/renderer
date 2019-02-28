@@ -8,7 +8,7 @@
 void LoadNodeTree(NodeTree * nodeTree,
 		  const char * filename,
 		  size_t outDataSize,
-		  Event ** events,
+		  Event * events,
 		  uint32_t numEvents)
 {
   uint32_t childrenToBeUpdated[MAXNODETREEDEPTH] = {0};
@@ -57,12 +57,12 @@ void LoadNodeTree(NodeTree * nodeTree,
 	  programs.update = NULL;
 	  char * name = linePtr + strlen(eventString);
 	  for (uint32_t i = 0; i < numEvents; ++i) {
-	    if (!strcmp(events[i]->name, name)) {
+	    if (!strcmp(events[i].name, name)) {
 	      Listener listener = {
 		&NodeEventCallback,
 		currentNode
 	      };
-	      EventAddListener(events[i], &listener);
+	      EventAddListener(events + i, &listener);
 	      break;
 	    }
 	  }

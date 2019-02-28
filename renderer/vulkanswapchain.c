@@ -4,9 +4,9 @@
 
 typedef struct SwapchainIn
 {
-  int var2;
-  WindowSize var1;
   VulkanContext var0;
+  WindowSize var1;
+  int var2;
 } SwapchainIn;
 
 void CreateSwapchain(Node * node)
@@ -21,6 +21,9 @@ void CreateSwapchain(Node * node)
       pfnDestroySwapchainKHR(in->var0.device, out->handle, NULL);
     return;
   }
+
+  out->windowSize.width = in->var1.width;
+  out->windowSize.height = in->var1.height;
   VkSurfaceCapabilitiesKHR surfaceCapabilities;
   pfnGetPhysicalDeviceSurfaceCapabilitiesKHR(in->var0.physicalDevice,
 					     in->var0.surface,

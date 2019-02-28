@@ -3,11 +3,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+Window * windows[1];
+uint32_t numWindows;
 
 static void WindowSizeCallback(GLFWwindow * window, int width, int height)
 {
   WindowSize windowSize = { width, height};
-  EventTrigger(&resizeEvent, (const void *)&windowSize);
+
+  for (uint32_t i = 0; i < numWindows; ++i)
+    if(windows[i]->window == window) {
+      EventTrigger(windows[i]->events + 1, (const void *)&windowSize);
+      break;
+    }
+}
+
+static void WindowCloseCallback(GLFWwindow * window)
+{
+  int closing = 1;
+  for (uint32_t i = 0; i < numWindows; ++i)
+    if(windows[i]->window == window) {
+      EventTrigger(windows[0]->events, (const void *)&closing);
+      break;
+    }
 }
 
 #ifdef _DEBUG
@@ -67,9 +84,37 @@ static int LoadVulkanFunctionPointers(VkInstance instance)
   return 1;
 }
 
-int InitGraphics(VulkanContext * context)
+void InitWindowEvents(Window * window)
 {
-  context->window = NULL;
+  window->numEvents = 4;
+  EventInit(&(window->events[0]), "exit", sizeof(int));
+  EventInit(&(window->events[1]), "resize", sizeof(WindowSize));
+  EventInit(&(window->events[2]), "context", sizeof(VulkanContext));
+  EventInit(&(window->events[3]), "update", sizeof(double));
+}
+double prevTime;
+void UpdateWindow(Window * window)
+{
+  glfwPollEvents();
+  double timeNow = glfwGetTime();
+  double dt = timeNow - prevTime;
+  prevTime = timeNow;
+  EventTrigger(window->events + 3, &dt);
+}
+
+int ShouldClose(Window * window)
+{
+  return glfwWindowShouldClose(window->window);
+}
+
+int CreateWindow(Window * window)
+{
+  /// As we won't be having multiple windows anytime soon,
+  /// let's assume we have only one.
+  windows[0] = window;
+  numWindows = 1;
+  VulkanContext * context = &(window->context);
+  window->window = NULL;
   context->instance = VK_NULL_HANDLE;
   context->physicalDevice = VK_NULL_HANDLE;
   context->device = VK_NULL_HANDLE;
@@ -87,6 +132,7 @@ int InitGraphics(VulkanContext * context)
     printf("GLFW initialisation failed\n");
     return 0;
   }
+  prevTime = glfwGetTime();
   if (!glfwVulkanSupported()) {
     printf("Vulkan not supported\n");
     return 0;
@@ -160,10 +206,10 @@ int InitGraphics(VulkanContext * context)
     return 0;
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  context->window = glfwCreateWindow(400, 400, "Demo", NULL, NULL);
-  if (context->window &&
+  window->window = glfwCreateWindow(400, 400, "Demo", NULL, NULL);
+  if (window->window &&
       VK_SUCCESS == glfwCreateWindowSurface(context->instance,
-					    context->window,
+					    window->window,
 					    NULL,
 					    &(context->surface)))
     printf("Window creation succeeded\n");
@@ -172,7 +218,8 @@ int InitGraphics(VulkanContext * context)
     return 0;
   }
 
-  glfwSetWindowSizeCallback(context->window, &WindowSizeCallback);
+  glfwSetWindowSizeCallback(window->window, &WindowSizeCallback);
+  glfwSetWindowCloseCallback(window->window, &WindowCloseCallback);
 
   uint32_t presentationQueue = 0;
   uint32_t graphicsQueue = 0;
@@ -305,13 +352,20 @@ int InitGraphics(VulkanContext * context)
     return 0;
   } else printf("Semaphore creation succeeded\n");
 
+  {
+    int closing = 0;
+    EventTrigger(window->events, &closing);
+    EventTrigger(window->events + 2, context);
+    WindowSize windowSize = {400, 400};
+    EventTrigger(window->events + 1, &windowSize);
+  }
   return 1;
 }
 
 
-void FreeGraphics(VulkanContext * context)
+void DestroyWindow(Window * window)
 {
-    
+  VulkanContext * context = &(window->context);
   if (context->instance != VK_NULL_HANDLE) {
     if (context->device != VK_NULL_HANDLE) {
       if (context->renderFinished != VK_NULL_HANDLE)
@@ -334,6 +388,6 @@ void FreeGraphics(VulkanContext * context)
     }
     pfnDestroyInstance(context->instance, NULL);
   }
-  glfwDestroyWindow(context->window);
+  glfwDestroyWindow(window->window);
   glfwTerminate();
 }

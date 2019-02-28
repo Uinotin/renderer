@@ -9,7 +9,6 @@
 
 typedef struct VulkanContext
 {
-  GLFWwindow * window;
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
   VkDevice device;
@@ -24,17 +23,26 @@ typedef struct VulkanContext
 #endif //_DEBUG
 } VulkanContext;
 
+typedef struct Window
+{
+  VulkanContext context;
+  GLFWwindow * window;
+  Event events[4];
+  uint32_t numEvents;
+} Window;
 
 typedef struct WindowSize
 {
   int width, height;
 } WindowSize;
-Event resizeEvent;
 
 PFN_vkGetPhysicalDeviceQueueFamilyProperties pfnGetPhysicalDeviceQueueFamilyProperties;
 
-int InitGraphics(VulkanContext * context);
-void FreeGraphics(VulkanContext * context);
+void InitWindowEvents(Window * window);
+void UpdateWindow(Window * window);
+int ShouldClose(Window * window);
+int CreateWindow(Window * window);
+void DestroyWindow(Window * window);
 
 PFN_vkCreateDevice pfnCreateDevice;
 PFN_vkEnumeratePhysicalDevices pfnEnumeratePhysicalDevices;

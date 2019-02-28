@@ -12,7 +12,7 @@
 /// (other than what Vulkan allocates,
 /// but we'll get to writing the alloc callbacks later).
 
-#define NODETREEMEMORYSIZE 256
+#define NODETREEMEMORYSIZE 2024
 #define MAXNUMTREENODES 64 
 #define MAXNODETREEDEPTH 32
 #define MAXNODECHILDREN 8
@@ -54,7 +54,7 @@ typedef struct NodeTree
 void LoadNodeTree(NodeTree * nodeTree,
 		  const char * filename,
 		  size_t outDataSize,
-		  Event ** events,
+		  Event * events,
 		  uint32_t numEvents);
 
 void UpdateNodeTree(NodeTree * nodeTree);

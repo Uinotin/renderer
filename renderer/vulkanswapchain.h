@@ -10,6 +10,7 @@ typedef struct VulkanSwapchain
   VkSwapchainKHR handle;
   VkImageView imageView[8];
   uint32_t numImageViews;
+  WindowSize windowSize;
 } VulkanSwapchain;
 
 size_t InitSwapchain(size_t * childOutData);

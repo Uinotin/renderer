@@ -1,8 +1,11 @@
 #include "programs.h"
 #include "vulkanswapchain.h"
+#include "rootnode.h"
 #define PROGRAMNAMEBUFFERSIZE 1024
-const char programNames[] = "swapchain";
+const char programNames[] = "root\0root_asset\0swapchain";
 const Programs programs[] = {
+  {&InitRootNode, &UpdateRootNode},
+  {&InitRootNodeAssetReload, &RootNodeAssetReload},
   {&InitSwapchain, &CreateSwapchain}
 };
 
