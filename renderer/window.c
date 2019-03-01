@@ -1,7 +1,8 @@
-#include "graphics.h"
+#include "window.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 Window * windows[1];
 uint32_t numWindows;
@@ -38,52 +39,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 }
 #endif /// _DEBUG
 
-#define FUNCIMPL(NAME) \
-  NAME =  (PFN_##NAME )glfwGetInstanceProcAddress(instance, #NAME );
-
-static int LoadVulkanFunctionPointers(VkInstance instance)
-{
-  pfnCreateDevice = (PFN_vkCreateDevice)glfwGetInstanceProcAddress(instance, "vkCreateDevice");
-  pfnEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)glfwGetInstanceProcAddress(instance, "vkEnumeratePhysicalDevices");
-  pfnGetPhysicalDeviceQueueFamilyProperties = (PFN_vkGetPhysicalDeviceQueueFamilyProperties)glfwGetInstanceProcAddress(instance, "vkGetPhysicalDeviceQueueFamilyProperties");
-  pfnGetPhysicalDeviceFeatures = (PFN_vkGetPhysicalDeviceFeatures)glfwGetInstanceProcAddress(instance, "vkGetPhysicalDeviceFeatures");
-  pfnCreateCommandPool = (PFN_vkCreateCommandPool)glfwGetInstanceProcAddress(instance, "vkCreateCommandPool");
-  pfnResetCommandPool = (PFN_vkResetCommandPool)glfwGetInstanceProcAddress(instance, "vkResetCommandPool");
-
-  pfnAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)glfwGetInstanceProcAddress(instance, "vkAllocateCommandBuffers");
-  pfnCreateRenderPass = (PFN_vkCreateRenderPass)glfwGetInstanceProcAddress(instance,"vkCreateRenderPass");
-  pfnCreateImage = (PFN_vkCreateImage)glfwGetInstanceProcAddress(instance,"vkCreateImage");
-  pfnCreateImageView = (PFN_vkCreateImageView)glfwGetInstanceProcAddress(instance,"vkCreateImageView");
-  pfnCreateFramebuffer = (PFN_vkCreateFramebuffer)glfwGetInstanceProcAddress(instance,"vkCreateFramebuffer");
-  pfnGetPhysicalDeviceSurfaceCapabilitiesKHR = (PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)glfwGetInstanceProcAddress(instance,"vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
-  pfnGetPhysicalDeviceSurfaceFormatsKHR = (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)glfwGetInstanceProcAddress(instance,"vkGetPhysicalDeviceSurfaceFormatsKHR");
-  pfnCreateSwapchainKHR = (PFN_vkCreateSwapchainKHR)glfwGetInstanceProcAddress(instance,"vkCreateSwapchainKHR");
-  pfnGetSwapchainImagesKHR = (PFN_vkGetSwapchainImagesKHR)glfwGetInstanceProcAddress(instance, "vkGetSwapchainImagesKHR");
-  pfnCreatePipelineLayout = (PFN_vkCreatePipelineLayout)glfwGetInstanceProcAddress(instance, "vkCreatePipelineLayout");
-  pfnCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)glfwGetInstanceProcAddress(instance, "vkCreateGraphicsPipelines");
-  pfnCreateShaderModule = (PFN_vkCreateShaderModule)glfwGetInstanceProcAddress(instance, "vkCreateShaderModule");
-  pfnCreateSemaphore = (PFN_vkCreateSemaphore)glfwGetInstanceProcAddress(instance, "vkCreateSemaphore");
-  pfnAcquireNextImageKHR = (PFN_vkAcquireNextImageKHR)glfwGetInstanceProcAddress(instance, "vkAcquireNextImageKHR");
-  pfnCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)glfwGetInstanceProcAddress(instance, "vkCmdBeginRenderPass");
-  pfnCmdBindPipeline = (PFN_vkCmdBindPipeline)glfwGetInstanceProcAddress(instance, "vkCmdBindPipeline");
-  pfnCmdDraw = (PFN_vkCmdDraw)glfwGetInstanceProcAddress(instance, "vkCmdDraw");
-  pfnCmdEndRenderPass = (PFN_vkCmdEndRenderPass)glfwGetInstanceProcAddress(instance, "vkCmdEndRenderPass");
-  pfnEndCommandBuffer = (PFN_vkEndCommandBuffer)glfwGetInstanceProcAddress(instance, "vkEndCommandBuffer");
-  pfnGetDeviceQueue = (PFN_vkGetDeviceQueue)glfwGetInstanceProcAddress(instance, "vkGetDeviceQueue");
-  pfnQueueSubmit = (PFN_vkQueueSubmit)glfwGetInstanceProcAddress(instance, "vkQueueSubmit");
-  pfnQueuePresentKHR = (PFN_vkQueuePresentKHR)glfwGetInstanceProcAddress(instance, "vkQueuePresentKHR");
-  pfnQueueWaitIdle = (PFN_vkQueueWaitIdle)glfwGetInstanceProcAddress(instance, "vkQueueWaitIdle");
-  pfnBeginCommandBuffer = (PFN_vkBeginCommandBuffer)glfwGetInstanceProcAddress(instance, "vkBeginCommandBuffer");
-  pfnGetPhysicalDeviceSurfaceSupportKHR = (PFN_vkGetPhysicalDeviceSurfaceSupportKHR)glfwGetInstanceProcAddress(instance, "vkGetPhysicalDeviceSurfaceSupportKHR");;
-  pfnDestroySemaphore = (PFN_vkDestroySemaphore)glfwGetInstanceProcAddress(instance, "vkDestroySemaphore");
-  pfnDestroyCommandPool = (PFN_vkDestroyCommandPool)glfwGetInstanceProcAddress(instance, "vkDestroyCommandPool");
-  pfnDestroyDevice = (PFN_vkDestroyDevice)glfwGetInstanceProcAddress(instance, "vkDestroyDevice");
-  pfnDestroyInstance = (PFN_vkDestroyInstance)glfwGetInstanceProcAddress(instance, "vkDestroyInstance");
-  pfnDestroyImageView = (PFN_vkDestroyImageView)glfwGetInstanceProcAddress(instance, "vkDestroyImageView");
-  pfnDestroySwapchainKHR = (PFN_vkDestroySwapchainKHR)glfwGetInstanceProcAddress(instance, "vkDestroySwapchainKHR");
-  return 1;
-}
-
 void InitWindowEvents(Window * window)
 {
   window->numEvents = 4;
@@ -99,6 +54,12 @@ void UpdateWindow(Window * window)
   double timeNow = glfwGetTime();
   double dt = timeNow - prevTime;
   prevTime = timeNow;
+  if (dt < 1.0 / 30.0) { 
+    usleep((useconds_t)((1.0/30-dt)/0.000001));
+    timeNow = glfwGetTime();
+    dt += timeNow - prevTime;
+    prevTime = timeNow;
+  }
   EventTrigger(window->events + 3, &dt);
 }
 
@@ -376,6 +337,7 @@ void DestroyWindow(Window * window)
 	pfnDestroyCommandPool(context->device, context->commandPool, NULL);
       pfnDestroyDevice(context->device, NULL);
     }
+    #ifdef _DEBUG
     if (context->debugMessenger != VK_NULL_HANDLE) {
       PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT =
         (PFN_vkDestroyDebugUtilsMessengerEXT)
@@ -386,6 +348,7 @@ void DestroyWindow(Window * window)
 				         context->debugMessenger,
 				         NULL);
     }
+#endif /// _DEBUG
     pfnDestroyInstance(context->instance, NULL);
   }
   glfwDestroyWindow(window->window);

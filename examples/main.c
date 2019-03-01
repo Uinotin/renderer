@@ -1,4 +1,4 @@
-#include "graphics.h"
+#include "window.h"
 #include "nodetree.h"
 #include <stdio.h>
 #include <stdlib.h>

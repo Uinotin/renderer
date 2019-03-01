@@ -2,25 +2,46 @@
 
 #include <stdio.h>
 
+typedef struct SwapchainCreateIn
+{
+  int var0;
+} SwapchainCreateIn;
+typedef struct SwapchainCreateLocals
+{
+  uint32_t numImageViews;
+} SwapchainCreateLocals;
+
 typedef struct SwapchainIn
 {
   VulkanContext var0;
   WindowSize var1;
   int var2;
+  SwapchainCreateLocals var3;
 } SwapchainIn;
+
+
+void StartSwapchainLocals(Node * node)
+{
+  SwapchainCreateLocals * out = (SwapchainCreateLocals *)node->out;
+  SwapchainCreateIn * in = (SwapchainCreateIn *)node->locals;
+  if (!in->var0)
+    out->numImageViews = 0;
+}
 
 void CreateSwapchain(Node * node)
 {
   SwapchainIn * in = (SwapchainIn *)node->locals;
   VulkanSwapchain * out = (VulkanSwapchain *)node->out;
-  if (in->var2) {
-    for (uint32_t i = 0; i < out->numImageViews; ++i)
+  if (in->var3.numImageViews) {
+    for (uint32_t i = 0; i < in->var3.numImageViews; ++i)
       if (out->imageView[i] != VK_NULL_HANDLE)
-	pfnDestroyImageView(in->var0.device, out->imageView[i], NULL);
+        pfnDestroyImageView(in->var0.device, out->imageView[i], NULL);
     if (out->handle != VK_NULL_HANDLE)
       pfnDestroySwapchainKHR(in->var0.device, out->handle, NULL);
-    return;
+    in->var3.numImageViews = 0;
   }
+  if (in->var2)
+    return;
 
   out->windowSize.width = in->var1.width;
   out->windowSize.height = in->var1.height;
@@ -28,8 +49,7 @@ void CreateSwapchain(Node * node)
   pfnGetPhysicalDeviceSurfaceCapabilitiesKHR(in->var0.physicalDevice,
 					     in->var0.surface,
 					     &surfaceCapabilities);
-  VkSurfaceFormatKHR surfaceFormat;
-  surfaceFormat.format = VK_FORMAT_UNDEFINED;
+  out->surfaceFormat.format = VK_FORMAT_UNDEFINED;
   VkSurfaceFormatKHR surfaceFormats[255];
   uint32_t nSurfaceFormats = sizeof(surfaceFormats)/sizeof(surfaceFormats[0]);
   pfnGetPhysicalDeviceSurfaceFormatsKHR(in->var0.physicalDevice,
@@ -37,15 +57,15 @@ void CreateSwapchain(Node * node)
 					&nSurfaceFormats,
 					surfaceFormats);
   if (nSurfaceFormats == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED) {
-    surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
-    surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    out->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
+    out->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
   } else for (uint32_t i = 0; i < nSurfaceFormats; ++i) {
     if (surfaceFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
 	surfaceFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-      surfaceFormat.format = surfaceFormats[i].format;
-    surfaceFormat.colorSpace = surfaceFormats[i].colorSpace;
+      out->surfaceFormat.format = surfaceFormats[i].format;
+    out->surfaceFormat.colorSpace = surfaceFormats[i].colorSpace;
   }
-  if (surfaceFormat.format == VK_FORMAT_UNDEFINED) {
+  if (out->surfaceFormat.format == VK_FORMAT_UNDEFINED) {
     printf("Could not find surface format\n");
   }
 
@@ -55,8 +75,8 @@ void CreateSwapchain(Node * node)
     0,
     in->var0.surface,
     2,
-    surfaceFormat.format,
-    surfaceFormat.colorSpace,
+    out->surfaceFormat.format,
+    out->surfaceFormat.colorSpace,
     {in->var1.width, in->var1.height},
     1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -85,6 +105,7 @@ void CreateSwapchain(Node * node)
 			   out->handle,
 			   &(out->numImageViews),
 			   images);
+  in->var3.numImageViews = out->numImageViews;
   printf("Swapchain has %u images\n", out->numImageViews);
 
   const VkComponentMapping componentMapping = {VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -104,7 +125,7 @@ void CreateSwapchain(Node * node)
     0,
     *images,
     VK_IMAGE_VIEW_TYPE_2D,
-    surfaceFormat.format,
+    out->surfaceFormat.format,
     componentMapping,
     imageSubresourceRange
   };
@@ -123,6 +144,11 @@ size_t InitSwapchain(size_t * childOutData)
   childOutData[0] = offsetof(SwapchainIn, var0);
   childOutData[1] = offsetof(SwapchainIn, var1);
   childOutData[2] = offsetof(SwapchainIn, var2);
+  childOutData[3] = offsetof(SwapchainIn, var3);
   return sizeof(SwapchainIn);
 }
 
+size_t InitSwapchainLocals(size_t * childOutData)
+{
+  return sizeof(SwapchainCreateLocals);
+}

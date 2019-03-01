@@ -4,6 +4,26 @@
 #include <string.h>
 #include <stdlib.h>
 
+static void TreeEventCallback(void * listener, const void * eventData, uint32_t dataSize)
+{
+  TreeEvent * event = (TreeEvent *)listener;
+  pthread_mutex_lock(&(event->event.mutex));
+  memcpy(event->data, eventData, dataSize);
+  event->isDirty = 1;
+  pthread_mutex_unlock(&(event->event.mutex));
+}
+
+void TreeEventInit(TreeEvent * treeEvent, Event * event, char ** memory)
+{
+  *memory -= event->dataSize;
+  treeEvent->data = *memory;
+  treeEvent->isDirty = 0;
+  EventInit(&(treeEvent->event), event->name, event->dataSize);
+
+  Listener listener = { &TreeEventCallback, treeEvent };
+  EventAddListener(event, &listener);
+}
+
 //Load trees.
 void LoadNodeTree(NodeTree * nodeTree,
 		  const char * filename,
@@ -11,6 +31,11 @@ void LoadNodeTree(NodeTree * nodeTree,
 		  Event * events,
 		  uint32_t numEvents)
 {
+  char * memory = nodeTree->memory + NODETREEMEMORYSIZE;
+  nodeTree->numEvents = numEvents;
+  for (uint32_t i = 0; i < numEvents; ++i)
+    TreeEventInit(nodeTree->treeEvents + i, events + i, &memory);
+  
   uint32_t childrenToBeUpdated[MAXNODETREEDEPTH] = {0};
   childrenToBeUpdated[0] = 1;
   void * ins[MAXNODETREEDEPTH][MAXNODECHILDREN];
@@ -19,7 +44,6 @@ void LoadNodeTree(NodeTree * nodeTree,
   /// branches will be updated leafs first.
   Node * currentNode = nodeTree->nodes + MAXNUMTREENODES;
   uint32_t numNodes = 0;
-  char * memory = nodeTree->memory + NODETREEMEMORYSIZE - outDataSize;
   int * depths = nodeTree->depths + MAXNUMTREENODES;
   FILE * file = fopen(filename, "r");
   if (!file) {
@@ -35,6 +59,8 @@ void LoadNodeTree(NodeTree * nodeTree,
   getline(&linePtr, &len, file);
 
   EventInit(&(nodeTree->readyEvent), linePtr, outDataSize);
+
+  memory -= outDataSize;
   ins[0][0] = (void *)memory;
 
   int depth = 0;
@@ -56,13 +82,13 @@ void LoadNodeTree(NodeTree * nodeTree,
 	  programs.initProgram = NULL;
 	  programs.update = NULL;
 	  char * name = linePtr + strlen(eventString);
-	  for (uint32_t i = 0; i < numEvents; ++i) {
-	    if (!strcmp(events[i].name, name)) {
+	  for (uint32_t i = 0; i < nodeTree->numEvents; ++i) {
+	    if (!strcmp(nodeTree->treeEvents[i].event.name, name)) {
 	      Listener listener = {
 		&NodeEventCallback,
 		currentNode
 	      };
-	      EventAddListener(events + i, &listener);
+	      EventAddListener(&(nodeTree->treeEvents[i].event), &listener);
 	      break;
 	    }
 	  }
@@ -96,6 +122,13 @@ void LoadNodeTree(NodeTree * nodeTree,
 
 void UpdateNodeTree(NodeTree * nodeTree)
 {
+  for (uint32_t i = 0; i < nodeTree->numEvents; ++i) {
+    if (!nodeTree->treeEvents[i].isDirty)
+      continue;
+    EventTrigger(&(nodeTree->treeEvents[i].event), nodeTree->treeEvents[i].data);
+    nodeTree->treeEvents[i].isDirty = 0;
+  }
+
   Node * currentNode = nodeTree->firstLeafNode;
   int * depths = nodeTree->firstLeafNodeDepth;
   uint32_t numNodes = nodeTree->numNodes;

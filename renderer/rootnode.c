@@ -1,11 +1,23 @@
 #include <stdio.h>
+#include <math.h>
 #include "rootnode.h"
 #include "vulkanswapchain.h"
+
+typedef struct RootNodeAssetStart
+{
+  uint32_t numImageViews;
+} RootNodeAssetStart;
+typedef struct RootNodeAssetStartIn
+{
+  int var0;
+} RootNodeAssetStartIn;
 
 typedef struct RootNodeAssets
 {
   VulkanContext var0;
   VulkanSwapchain var1;
+  int var2;
+  RootNodeAssetStart var3;
 } RootNodeAssets;
 
 typedef struct VulkanRenderPass 
@@ -17,6 +29,8 @@ typedef struct VulkanRenderPass
   VkFramebuffer framebuffers[8];
   VkSwapchainKHR swapchainHandle;
   WindowSize windowSize;
+  float projMatrix[16];
+  float location[3];
 } VulkanRenderPass;
 
 typedef struct RootNode
@@ -24,12 +38,29 @@ typedef struct RootNode
   VulkanContext var0;
   VulkanRenderPass var1;
   double var2;
+  int var3;
 } RootNode;
+
+size_t InitRootNodeAssetReloadStart(size_t * childOutSizes)
+{
+  childOutSizes[0] = offsetof(RootNodeAssetStartIn, var0);
+  return sizeof(RootNodeAssetStartIn);
+}
+
+void InitReloadValues(Node * node)
+{
+  RootNodeAssetStart * start = (RootNodeAssetStart *)node->out;
+  RootNodeAssetStartIn * in = (RootNodeAssetStartIn *)node->locals;
+  if (!in->var0)
+    start->numImageViews = 0;
+}
 
 size_t InitRootNodeAssetReload(size_t * childOutSizes)
 {
   childOutSizes[0] = offsetof(RootNodeAssets, var0);
   childOutSizes[1] = offsetof(RootNodeAssets, var1);
+  childOutSizes[2] = offsetof(RootNodeAssets, var2);
+  childOutSizes[3] = offsetof(RootNodeAssets, var3);
   return sizeof(RootNodeAssets);
 }
 
@@ -38,6 +69,7 @@ size_t InitRootNode(size_t * childOutSizes)
   childOutSizes[0] = offsetof(RootNode, var0);
   childOutSizes[1] = offsetof(RootNode, var1);
   childOutSizes[2] = offsetof(RootNode, var2);
+  childOutSizes[3] = offsetof(RootNode, var3);
   return sizeof(RootNode);
 }
 
@@ -90,11 +122,59 @@ static VkShaderModule LoadShaderModule(const VkDevice device, const char * filen
   return shaderModule;
 }
 
+static void Identity(float * mat)
+{
+  mat[0] = 1;
+  mat[1] = 0;
+  mat[2] = 0;
+  mat[3] = 0;
+
+  mat[4] = 0;
+  mat[5] = 1;
+  mat[6] = 0;
+  mat[7] = 0;
+
+  mat[8] = 0;
+  mat[9] = 0;
+  mat[10] = 1;
+  mat[11] = 0;
+
+  mat[12] = 0;
+  mat[13] = 0;
+  mat[14] = 0;
+  mat[15] = 1;
+}
+
+static void Perspective(float * mat, float fov, float near, float far, float aspect)
+{
+  mat[0] = 1.0f/aspect;
+}
+
 void RootNodeAssetReload(Node * node)
 {
   RootNodeAssets * in = (RootNodeAssets *)node->locals;
   VulkanRenderPass * out = (VulkanRenderPass *)node->out;
+  /// todo: Cleanup
+  if (in->var3.numImageViews) {
+    pfnFreeCommandBuffers(in->var0.device,
+			  in->var0.commandPool,
+			  in->var3.numImageViews,
+			  out->commandBuffers);
+    pfnDestroyRenderPass(in->var0.device, out->handle, NULL);
+    for (uint32_t i = 0; i < in->var3.numImageViews; ++i)
+      pfnDestroyFramebuffer(in->var0.device, out->framebuffers[i], NULL);
+    pfnDestroyPipelineLayout(in->var0.device, out->pipelineLayout, NULL);
+    pfnDestroyPipeline(in->var0.device, out->pipeline, NULL);
+  }
+  if (in->var2)
+    return;
+  in->var3.numImageViews = in->var1.numImageViews;
+  out->windowSize.width = in->var1.windowSize.width;
+  out->windowSize.height = in->var1.windowSize.height;
   out->swapchainHandle = in->var1.handle;
+  Identity(out->projMatrix);
+  Perspective(out->projMatrix, 6.0, 0.1f, 10.0f,
+	      out->windowSize.width/out->windowSize.height);
   { ///Allocate command buffers
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -115,7 +195,7 @@ void RootNodeAssetReload(Node * node)
     const VkAttachmentDescription attachmentDescriptions[] = {
       {
 	VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
-	VK_FORMAT_B8G8R8A8_UNORM,
+	in->var1.surfaceFormat.format,
 	VK_SAMPLE_COUNT_1_BIT,
 	VK_ATTACHMENT_LOAD_OP_CLEAR,
 	VK_ATTACHMENT_STORE_OP_STORE,
@@ -177,24 +257,25 @@ void RootNodeAssetReload(Node * node)
   } /// End render pass creation
 
   { /// Create framebuffers
-  for (uint32_t i = 0; i < in->var1.numImageViews; ++i) {
-    const VkFramebufferCreateInfo framebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                                                         NULL,
-                                                         0,
-                                                         out->handle,
-							 1,
-							 in->var1.imageView + i,
-                                                         in->var1.windowSize.width,
-                                                         in->var1.windowSize.height,
-                                                         1};
-    if (VK_SUCCESS == pfnCreateFramebuffer(in->var0.device,
-					   &framebufferCreateInfo,
-					   NULL,
-					   out->framebuffers + i))
+    for (uint32_t i = 0; i < in->var1.numImageViews; ++i) {
+      const VkFramebufferCreateInfo framebufferCreateInfo = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        NULL,
+        0,
+        out->handle,
+        1,
+        in->var1.imageView + i,
+        in->var1.windowSize.width,
+        in->var1.windowSize.height,
+        1
+      };
+      if (VK_SUCCESS == pfnCreateFramebuffer(in->var0.device,
+					     &framebufferCreateInfo,
+					     NULL,
+					     out->framebuffers + i))
       printf("Framebuffer creation successful\n");
-
+    }
   } /// Create framebuffers
-  }
   { /// Create pipeline for main pass
     VkShaderModule vertexShaderModule = LoadShaderModule(in->var0.device, "shader/vert.spv");
     VkShaderModule fragmentShaderModule = LoadShaderModule(in->var0.device, "shader/frag.spv");
@@ -202,22 +283,22 @@ void RootNodeAssetReload(Node * node)
     uint32_t nPipelineStages = 2;
     VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[] = {
       {
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      NULL,
-      0,
-      VK_SHADER_STAGE_VERTEX_BIT,
-      vertexShaderModule,
-      "main",
-      NULL
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        NULL,
+        0,
+        VK_SHADER_STAGE_VERTEX_BIT,
+        vertexShaderModule,
+        "main",
+        NULL
       },
       {
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      NULL,
-      0,
-      VK_SHADER_STAGE_FRAGMENT_BIT,
-      fragmentShaderModule,
-      "main",
-      NULL
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        NULL,
+        0,
+        VK_SHADER_STAGE_FRAGMENT_BIT,
+        fragmentShaderModule,
+        "main",
+        NULL
       }
     };
     VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {
@@ -233,22 +314,22 @@ void RootNodeAssetReload(Node * node)
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
       NULL,
       0,
-      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
       VK_FALSE
     };
     const VkViewport viewport =
-      {
-        0.0f,
-        0.0f,
-        (float)in->var1.windowSize.width,
-        (float)in->var1.windowSize.height,
-        0.0f,
-        1.0f
-      };
+    {
+      0.0f,
+      0.0f,
+      (float)in->var1.windowSize.width,
+      (float)in->var1.windowSize.height,
+      0.0f,
+      1.0f
+    };
   
     const VkRect2D scissor = {
-        {0,0},
-        {in->var1.windowSize.width, in->var1.windowSize.height}
+      {0,0},
+      {in->var1.windowSize.width, in->var1.windowSize.height}
     };
     const VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -267,7 +348,7 @@ void RootNodeAssetReload(Node * node)
       VK_FALSE,
       VK_FALSE,
       VK_POLYGON_MODE_FILL,
-      VK_CULL_MODE_BACK_BIT,
+      VK_CULL_MODE_NONE,
       VK_FRONT_FACE_CLOCKWISE,
       VK_FALSE,
       0.0f,
@@ -323,14 +404,19 @@ void RootNodeAssetReload(Node * node)
         dynamicStates
     };
   
+    VkPushConstantRange pushConstantRange = {
+      VK_SHADER_STAGE_VERTEX_BIT,
+      0,
+      16*sizeof(float)
+    };
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       NULL,
       0,
       0,
       NULL,
-      0,
-      NULL
+      1,
+      &pushConstantRange
     };
     if (VK_SUCCESS !=
 	pfnCreatePipelineLayout(in->var0.device,
@@ -365,8 +451,26 @@ void RootNodeAssetReload(Node * node)
     if (VK_SUCCESS != pfnCreateGraphicsPipelines(in->var0.device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, NULL, &out->pipeline))
       printf("Pipeline creation failed\n");
     else printf("Pipeline creation succeeded\n");
-  } /// End main pass pipeline creation
 
+    pfnDestroyShaderModule(in->var0.device, fragmentShaderModule, NULL);
+    pfnDestroyShaderModule(in->var0.device, vertexShaderModule, NULL);
+  } /// End main pass pipeline creation
+}
+
+void UpdateRootNode(Node * node)
+{
+  RootNode * in = (RootNode *)node->locals;
+  if (in->var3)
+    return;
+  uint32_t imageNext;
+  pfnAcquireNextImageKHR(in->var0.device,
+			 in->var1.swapchainHandle,
+			 UINT64_MAX,
+			 in->var0.imageAvailable,
+			 VK_NULL_HANDLE,
+			 &imageNext);
+
+  {
   VkClearColorValue clearColorValue = {{1.0f, 0.0f, 0.0f, 1.0f}};
   VkClearValue clearColor;
   clearColor.color = clearColorValue;
@@ -379,36 +483,28 @@ void RootNodeAssetReload(Node * node)
   VkRenderPassBeginInfo renderPassBeginInfo = {
     VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
     NULL,
-    out->handle,
+    in->var1.handle,
     NULL,
     {{0,0},{in->var1.windowSize.width,in->var1.windowSize.height}},
     1,
     &clearColor
   };
-  for (uint32_t i = 0; i < in->var1.numImageViews; ++i) {
-    renderPassBeginInfo.framebuffer = out->framebuffers[i];
+    renderPassBeginInfo.framebuffer = in->var1.framebuffers[imageNext];
 
-    pfnBeginCommandBuffer(out->commandBuffers[i], &commandBufferBeginInfo);
-    pfnCmdBeginRenderPass(out->commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    pfnCmdBindPipeline(out->commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, out->pipeline);
-    pfnCmdDraw(out->commandBuffers[i], 3, 1, 0, 0);
-    pfnCmdEndRenderPass(out->commandBuffers[i]);
-    if (VK_SUCCESS != pfnEndCommandBuffer(out->commandBuffers[i]))
+    pfnBeginCommandBuffer(in->var1.commandBuffers[imageNext], &commandBufferBeginInfo);
+    pfnCmdPushConstants(in->var1.commandBuffers[imageNext],
+			in->var1.pipelineLayout,
+			VK_SHADER_STAGE_VERTEX_BIT,
+			0,
+			16*sizeof(float),
+			in->var1.projMatrix);
+    pfnCmdBeginRenderPass(in->var1.commandBuffers[imageNext], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    pfnCmdBindPipeline(in->var1.commandBuffers[imageNext], VK_PIPELINE_BIND_POINT_GRAPHICS, in->var1.pipeline);
+    pfnCmdDraw(in->var1.commandBuffers[imageNext], 4, 1, 0, 0);
+    pfnCmdEndRenderPass(in->var1.commandBuffers[imageNext]);
+    if (VK_SUCCESS != pfnEndCommandBuffer(in->var1.commandBuffers[imageNext]))
       printf("Failed to record command buffer\n");
-    else printf("Command buffer recording succeeded\n");
   }
-}
-
-void UpdateRootNode(Node * node)
-{
-  RootNode * in = (RootNode *)node->locals;
-  uint32_t imageNext;
-  pfnAcquireNextImageKHR(in->var0.device,
-			 in->var1.swapchainHandle,
-			 UINT64_MAX,
-			 in->var0.imageAvailable,
-			 VK_NULL_HANDLE,
-			 &imageNext);
 
   const VkSemaphore waitSemaphores[] = {in->var0.imageAvailable};
   const VkSemaphore signalSemaphores[] = {in->var0.renderFinished};
@@ -446,95 +542,3 @@ void UpdateRootNode(Node * node)
     printf("Failed to present queue\n");
   pfnQueueWaitIdle(in->var0.presentationQueue);
 }
-/*
-uint32_t InitRootNode(Node * node,
-		      char ** memory,
-		      InitProgram * childInitPrograms,
-		      void * out,
-		      void ** childOutData,
-		      UpdateProgram * updateProgram)
-{
-  *memory -= sizeof(RootNode);
-  node->locals = (RootNode *)*memory;
-  RootNode * rootNode = (RootNode *)node->locals;
-  node->out = NULL;
-  node->update = &updateRootNode;
-  childOutData[0] = (void *)&(rootNode->passInfo);
-  childOutData[1] = (void *)&(rootNode->vulkanContextInfo);
-  childInitPrograms[0] = (void *)&InitVulkanRenderPass;
-
-  return 2;
-}
-uint32_t InitRootNode(RenderPass * renderPass,
-		      char ** memory,
-		      char ** sharedMemory,
-		      InitProgram * childInitPrograms,
-		      char ** childOutData,
-		      UpdateProgram * updateProgram,
-		      UpdateProgram * freeProgram)
-{
-  *freeProgram = &FreeRootNode;
-  *updateProgram = &UpdateRootNode;
-
-  *memory -= sizeof(RootNode);
-  RootNode * rootNode = (RootNode *)(*memory);
-  renderPass->locals = (void*)rootNode;
-  renderPass->out = NULL;
-  renderPass->numChildren = 0;
-
-  return 0;
-}
-
-void UpdateRootNode(RenderPass * renderPass)
-{
-  RootNode * rootNode = (RootNode *)renderPass->locals;
-  uint32_t imageNext;
-  pfnAcquireNextImageKHR(rootNode->vulkanContext.device,
-			 rootNode->swapchain.handle,
-			 UINT64_MAX,
-			 rootNode->vulkanContext.imageAvailable,
-			 VK_NULL_HANDLE,
-			 &imageNext);
-
-  const VkSemaphore waitSemaphores[] = {rootNode->vulkanContext.imageAvailable};
-  const VkSemaphore signalSemaphores[] = {rootNode->vulkanContext.renderFinished};
-  const VkPipelineStageFlags stageFlags[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  VkSubmitInfo submitInfo = {
-    VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    NULL,
-    1,
-    waitSemaphores,
-    stageFlags,
-    1,
-    rootNode->passInfo.commandBuffer,
-    1,
-    signalSemaphores
-  };
-
-  VkResult result = pfnQueueSubmit(rootNode->vulkanContext.graphicsQueueHandle,
-				   1, &submitInfo, VK_NULL_HANDLE);
-  if (result != VK_SUCCESS)
-    printf("Failed to submit draw\n");
-
-  VkSwapchainKHR swapchains[] = {rootNode->vulkanContext.swapchain};
-  VkPresentInfoKHR presentInfo = {
-      VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-      0,
-      1,
-      rootNode->vulkanContext.signalSemaphores,
-      1,
-      swapchains,
-      &imageNext,
-      &result
-  };
-  pfnQueuePresentKHR(rootNode->vulkanContext.presentationQueueHandle, &presentInfo);
-  if (VK_SUCCESS != result)
-    printf("Failed to present queue\n");
-  pfnQueueWaitIdle(rootNode->vulkanContext.presentationQueueHandle);
-}
-
-void FreeRootNode(RenderPass * renderPass)
-{
-}
-
-*/

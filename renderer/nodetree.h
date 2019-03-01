@@ -12,10 +12,11 @@
 /// (other than what Vulkan allocates,
 /// but we'll get to writing the alloc callbacks later).
 
-#define NODETREEMEMORYSIZE 2024
+#define NODETREEMEMORYSIZE 8096 
 #define MAXNUMTREENODES 64 
 #define MAXNODETREEDEPTH 32
 #define MAXNODECHILDREN 8
+#define MAXNUMEVENTS 16
 
 /// This is the core data structure for the programme.
 /// All operations both loading and updating are done through this.
@@ -36,6 +37,15 @@
 /// nodes, will be updated and the rest contain their previous states
 /// as long as those are valid.
 
+typedef struct TreeEvent
+{
+  Event event;
+  int isDirty;
+  void * data;
+} TreeEvent;
+
+void TreeEventInit(TreeEvent * treeEvent, Event * event, char ** memory);
+
 typedef struct NodeTree
 {
   Node * firstLeafNode;
@@ -48,6 +58,8 @@ typedef struct NodeTree
   char memory[NODETREEMEMORYSIZE];
 
   pthread_mutex_t mutex;
+  TreeEvent treeEvents[MAXNUMEVENTS];
+  uint32_t numEvents;
   Event readyEvent;
 } NodeTree;
 
