@@ -7,9 +7,15 @@ On the to-do list is also making the folder structure clearer and dividing the p
 
 Build instructions:
 cmake .
+
 make
+
 cd examples/shader
+
 glslangValidator -V landscape.vert
+
 glslangValidator -V landscape.tesc
+
 glslangValidator -V landscape.tese
+
 glslangValidator -V landscape.frag
