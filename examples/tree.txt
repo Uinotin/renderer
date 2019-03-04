@@ -1,6 +1,8 @@
 triangletree
 root
-4
+5
+event_wasd
+0
 event_exit
 0
 event_update

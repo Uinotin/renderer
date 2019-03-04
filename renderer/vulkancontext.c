@@ -21,6 +21,8 @@ int LoadVulkanFunctionPointers(VkInstance instance)
   FUNCIMPL(CreateFramebuffer);
   FUNCIMPL(GetPhysicalDeviceSurfaceCapabilitiesKHR);
   FUNCIMPL(GetPhysicalDeviceSurfaceFormatsKHR);
+  FUNCIMPL(GetImageMemoryRequirements);
+  FUNCIMPL(GetPhysicalDeviceMemoryProperties);
   FUNCIMPL(CreateSwapchainKHR);
   FUNCIMPL(GetSwapchainImagesKHR);
   FUNCIMPL(CreatePipelineLayout);
@@ -33,6 +35,7 @@ int LoadVulkanFunctionPointers(VkInstance instance)
   FUNCIMPL(CmdDraw);
   FUNCIMPL(CmdEndRenderPass);
   FUNCIMPL(CmdPushConstants);
+  FUNCIMPL(CmdPipelineBarrier);
   FUNCIMPL(EndCommandBuffer);
   FUNCIMPL(GetDeviceQueue);
   FUNCIMPL(QueueSubmit);
@@ -47,11 +50,15 @@ int LoadVulkanFunctionPointers(VkInstance instance)
   FUNCIMPL(DestroyImageView);
   FUNCIMPL(DestroySwapchainKHR);
   FUNCIMPL(FreeCommandBuffers);
+  FUNCIMPL(FreeMemory);
   FUNCIMPL(DestroyRenderPass);
   FUNCIMPL(DestroyFramebuffer);
   FUNCIMPL(DestroyPipelineLayout);
   FUNCIMPL(DestroyPipeline);
   FUNCIMPL(DestroyShaderModule);
+  FUNCIMPL(DestroyImage);
   FUNCIMPL(DeviceWaitIdle);
+  FUNCIMPL(AllocateMemory);
+  FUNCIMPL(BindImageMemory);
   return 1;
 }

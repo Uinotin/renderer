@@ -17,6 +17,9 @@ typedef struct SwapchainIn
   WindowSize var1;
   int var2;
   SwapchainCreateLocals var3;
+  VkImage depthImage;
+  VkBuffer depthBuffer;
+  VkDeviceMemory depthImageMemory;
 } SwapchainIn;
 
 
@@ -33,6 +36,9 @@ void CreateSwapchain(Node * node)
   SwapchainIn * in = (SwapchainIn *)node->locals;
   VulkanSwapchain * out = (VulkanSwapchain *)node->out;
   if (in->var3.numImageViews) {
+    pfnDestroyImage(in->var0.device, in->depthImage, NULL);
+    pfnDestroyImageView(in->var0.device, out->depthImageView, NULL);
+    pfnFreeMemory(in->var0.device, in->depthImageMemory, NULL);
     for (uint32_t i = 0; i < in->var3.numImageViews; ++i)
       if (out->imageView[i] != VK_NULL_HANDLE)
         pfnDestroyImageView(in->var0.device, out->imageView[i], NULL);
@@ -136,6 +142,165 @@ void CreateSwapchain(Node * node)
       printf("Image view creation failed.\n");
     else printf("Image view creation succeeded\n");
   }
+
+  { /// Create depth buffer image, view and memory
+    {
+      VkImageCreateInfo imageCreateInfo = {
+        VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        NULL,
+	0,
+        VK_IMAGE_TYPE_2D,
+        VK_FORMAT_D32_SFLOAT,
+        {in->var1.width, in->var1.height, 1},
+        1,
+        1,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_SHARING_MODE_EXCLUSIVE,
+        0,
+        NULL,
+        VK_IMAGE_LAYOUT_UNDEFINED
+      };
+      if(VK_SUCCESS !=
+         pfnCreateImage(in->var0.device, &imageCreateInfo, NULL, &(in->depthImage)))
+         printf("Failed to create depth image\n");
+    }
+    { /// Allocate memory
+      VkMemoryRequirements memReq;
+      pfnGetImageMemoryRequirements(in->var0.device, in->depthImage, &memReq);
+      VkPhysicalDeviceMemoryProperties memProps;
+      pfnGetPhysicalDeviceMemoryProperties(in->var0.physicalDevice, &memProps);
+      uint32_t memoryTypeIndex;
+      for (memoryTypeIndex = 0;
+	   memoryTypeIndex < memProps.memoryTypeCount;
+	   ++memoryTypeIndex) {
+	if (memReq.memoryTypeBits & (1 << memoryTypeIndex) &&
+	    (memProps.memoryTypes[memoryTypeIndex].propertyFlags &
+	     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ==
+	    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+	  break;
+      }
+      if (memoryTypeIndex == memProps.memoryTypeCount)
+	printf("Failed to find suitable memory type\n");
+	
+      VkMemoryAllocateInfo allocInfo = {
+	VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+	NULL,
+	memReq.size,
+	memoryTypeIndex
+      };
+
+      if(VK_SUCCESS !=
+	 pfnAllocateMemory(in->var0.device, &allocInfo, NULL, &(in->depthImageMemory)))
+	printf("Failed to allocate buffer\n");
+      pfnBindImageMemory(in->var0.device, in->depthImage, in->depthImageMemory, 0);
+    } /// Allocate memory
+    { /// Create image view
+      const VkComponentMapping componentMapping = {
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY
+      };
+
+      const VkImageSubresourceRange imageSubresourceRange = {
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        0,
+        1,
+        0,
+        1
+      };
+
+      VkImageViewCreateInfo imageViewCreateInfo = {
+        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        0,
+        0,
+        in->depthImage,
+        VK_IMAGE_VIEW_TYPE_2D,
+        VK_FORMAT_D32_SFLOAT,
+        componentMapping,
+        imageSubresourceRange
+      };
+
+      if (VK_SUCCESS !=
+	  pfnCreateImageView(in->var0.device,
+			     &imageViewCreateInfo,
+			     NULL,
+			     &(out->depthImageView)))
+          printf("Depth image view creation failed.\n");
+      else printf("Depth image view creation succeeded\n");
+    } /// Create image view
+    {
+      VkCommandBufferAllocateInfo allocInfo =
+      {
+	  VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+	  NULL,
+	  in->var0.commandPool,
+	  VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+	  1
+      };
+      VkCommandBuffer commandBuffer;
+      pfnAllocateCommandBuffers(in->var0.device, &allocInfo, &commandBuffer);
+
+      VkCommandBufferBeginInfo beginInfo = {
+	VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+	0,
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	NULL
+      };
+
+      pfnBeginCommandBuffer(commandBuffer, &beginInfo);
+
+      VkImageMemoryBarrier barrier = {
+	VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+	NULL,
+	0,
+	VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+	VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        in->depthImage,
+	{
+	  VK_IMAGE_ASPECT_DEPTH_BIT,
+	  0,
+	  1,
+	  0,
+	  1
+	}
+      };
+      pfnCmdPipelineBarrier(commandBuffer,
+			   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			   VK_PIPELINE_STAGE_TRANSFER_BIT,
+			   0,
+			   0,
+			   NULL,
+			   0,
+			   NULL,
+			   1,
+			   &barrier);
+
+      pfnEndCommandBuffer(commandBuffer);
+
+      VkSubmitInfo submitInfo = {
+	VK_STRUCTURE_TYPE_SUBMIT_INFO,
+	0,
+	0,
+	NULL,
+	0,
+        1,
+        &commandBuffer,
+	0,
+	NULL
+      };
+
+      pfnQueueSubmit(in->var0.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+      pfnQueueWaitIdle(in->var0.graphicsQueue);
+
+      pfnFreeCommandBuffers(in->var0.device, in->var0.commandPool, 1, &commandBuffer);
+    }
+  } /// Create depth buffer image, view and memory
 }
 
 size_t InitSwapchain(size_t * childOutData)

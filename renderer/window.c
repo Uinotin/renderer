@@ -7,6 +7,50 @@
 Window * windows[1];
 uint32_t numWindows;
 
+WasdKeyStatus wasd;
+static void KeyCallback(GLFWwindow * window, int key, int scancode, int action, int mods)
+{
+  for (uint32_t i = 0; i < numWindows; ++i)
+    if(windows[i]->window == window) {
+      /// HACK, make this more generic later
+      if ((action == GLFW_RELEASE || action == GLFW_PRESS) &&
+	  (key == GLFW_KEY_W || key == GLFW_KEY_A || key == GLFW_KEY_S || key == GLFW_KEY_D ||
+	   key == GLFW_KEY_UP || key == GLFW_KEY_DOWN ||
+	   key == GLFW_KEY_RIGHT || key == GLFW_KEY_LEFT)) {
+        switch (key) {
+        case GLFW_KEY_W:
+          wasd.w = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_A:
+          wasd.a = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_S:
+          wasd.s = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_D:
+          wasd.d = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_UP:
+          wasd.up = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_DOWN:
+          wasd.down = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_LEFT:
+          wasd.left = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        case GLFW_KEY_RIGHT:
+          wasd.right = action == GLFW_RELEASE ? 0 : 1;
+          break;
+        default:
+          break;
+        }
+	EventTrigger(&(windows[i]->events[4]), &wasd);
+      }
+      break;
+    }
+}
+
 static void WindowSizeCallback(GLFWwindow * window, int width, int height)
 {
   WindowSize windowSize = { width, height};
@@ -41,11 +85,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
 void InitWindowEvents(Window * window)
 {
-  window->numEvents = 4;
+  window->numEvents = 5;
   EventInit(&(window->events[0]), "exit", sizeof(int));
   EventInit(&(window->events[1]), "resize", sizeof(WindowSize));
   EventInit(&(window->events[2]), "context", sizeof(VulkanContext));
   EventInit(&(window->events[3]), "update", sizeof(double));
+  EventInit(&(window->events[4]), "wasd", sizeof(WasdKeyStatus));
 }
 double prevTime;
 void UpdateWindow(Window * window)
@@ -179,6 +224,7 @@ int CreateWindow(Window * window)
     return 0;
   }
 
+  glfwSetKeyCallback(window->window, &KeyCallback);
   glfwSetWindowSizeCallback(window->window, &WindowSizeCallback);
   glfwSetWindowCloseCallback(window->window, &WindowCloseCallback);
 

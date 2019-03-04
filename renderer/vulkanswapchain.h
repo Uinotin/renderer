@@ -10,6 +10,7 @@ typedef struct VulkanSwapchain
   VkSwapchainKHR handle;
   VkSurfaceFormatKHR surfaceFormat;
   VkImageView imageView[8];
+  VkImageView depthImageView;
   uint32_t numImageViews;
   WindowSize windowSize;
 } VulkanSwapchain;

@@ -29,8 +29,10 @@ typedef struct VulkanRenderPass
   VkFramebuffer framebuffers[8];
   VkSwapchainKHR swapchainHandle;
   WindowSize windowSize;
-  float projMatrix[16];
-  float location[3];
+  float projMatAndLoc[24];
+  float rotationX,rotationY;
+  float *location;
+  float *rotation;
 } VulkanRenderPass;
 
 typedef struct RootNode
@@ -39,6 +41,7 @@ typedef struct RootNode
   VulkanRenderPass var1;
   double var2;
   int var3;
+  WasdKeyStatus var4;
 } RootNode;
 
 size_t InitRootNodeAssetReloadStart(size_t * childOutSizes)
@@ -70,6 +73,7 @@ size_t InitRootNode(size_t * childOutSizes)
   childOutSizes[1] = offsetof(RootNode, var1);
   childOutSizes[2] = offsetof(RootNode, var2);
   childOutSizes[3] = offsetof(RootNode, var3);
+  childOutSizes[4] = offsetof(RootNode, var4);
   return sizeof(RootNode);
 }
 
@@ -147,8 +151,20 @@ static void Identity(float * mat)
 
 static void Perspective(float * mat, float fov, float near, float far, float aspect)
 {
-  mat[0] = 1.0f/aspect;
-}
+  mat[0] = (float)atan((double)(fov/2.0f))/aspect;
+  mat[5] = (float)atan((double)(fov/2.0f));
+  mat[10] = (far+near)/(far-near);
+  mat[11] = 1.0f;
+  mat[14] = -(far*near)/(far-near);
+  mat[15] = 0;
+  }
+
+/*static void Translate(float *mat, float *vec, float factor)
+{
+  mat[12] += vec[0] * factor;
+  mat[13] += vec[1] * factor;
+  mat[14] += vec[2] * factor;
+  }*/
 
 void RootNodeAssetReload(Node * node)
 {
@@ -172,9 +188,19 @@ void RootNodeAssetReload(Node * node)
   out->windowSize.width = in->var1.windowSize.width;
   out->windowSize.height = in->var1.windowSize.height;
   out->swapchainHandle = in->var1.handle;
-  Identity(out->projMatrix);
-  Perspective(out->projMatrix, 6.0, 0.1f, 10.0f,
-	      out->windowSize.width/out->windowSize.height);
+  out->location = out->projMatAndLoc + 16;
+  out->location[0] = 0;
+  out->location[1] = 0;
+  out->location[2] = 0;
+  out->rotationX = 0;
+  out->rotationY = 0;
+  out->rotation = out->projMatAndLoc + 20;
+  out->rotation[0] = 0;
+  out->rotation[1] = 0;
+  out->rotation[2] = 0;
+  Identity(out->projMatAndLoc);
+  Perspective(out->projMatAndLoc, 5.0, 0.1f, 10.0f,
+  ((float)(out->windowSize.width))/((float)(out->windowSize.height)));
   { ///Allocate command buffers
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -191,7 +217,7 @@ void RootNodeAssetReload(Node * node)
     printf("Created primary command buffers\n");
   } ///End command buffer allocation
   { ///Create a render pass
-    uint32_t nAttachments = 1;
+    uint32_t nAttachments = 2;
     const VkAttachmentDescription attachmentDescriptions[] = {
       {
 	VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
@@ -203,12 +229,29 @@ void RootNodeAssetReload(Node * node)
 	VK_ATTACHMENT_STORE_OP_STORE,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+      },
+      {
+	VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
+        VK_FORMAT_D32_SFLOAT,
+	VK_SAMPLE_COUNT_1_BIT,
+	VK_ATTACHMENT_LOAD_OP_CLEAR,
+	VK_ATTACHMENT_STORE_OP_DONT_CARE,
+	VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+	VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
       }
     };
 
-    const VkAttachmentReference attachmentReference = {
-      0,
-      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    const VkAttachmentReference attachmentReference[] = {
+      {
+        0,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+      },
+      {
+        1,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+      }
     };
     uint32_t nSubpasses = 1;
 
@@ -219,9 +262,9 @@ void RootNodeAssetReload(Node * node)
        0,
        NULL,
        1,
-       &attachmentReference,
+       attachmentReference,
        NULL,
-       NULL,
+       attachmentReference + 1,
        0,
        NULL
       }
@@ -258,13 +301,17 @@ void RootNodeAssetReload(Node * node)
 
   { /// Create framebuffers
     for (uint32_t i = 0; i < in->var1.numImageViews; ++i) {
+      VkImageView imageViews[] = {
+	in->var1.imageView[i],
+	in->var1.depthImageView
+      };
       const VkFramebufferCreateInfo framebufferCreateInfo = {
         VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         NULL,
         0,
         out->handle,
-        1,
-        in->var1.imageView + i,
+        2,
+        imageViews,
         in->var1.windowSize.width,
         in->var1.windowSize.height,
         1
@@ -278,9 +325,11 @@ void RootNodeAssetReload(Node * node)
   } /// Create framebuffers
   { /// Create pipeline for main pass
     VkShaderModule vertexShaderModule = LoadShaderModule(in->var0.device, "shader/vert.spv");
+    VkShaderModule tessellationControlShaderModule = LoadShaderModule(in->var0.device, "shader/tesc.spv");
+    VkShaderModule tessellationEvaluationShaderModule = LoadShaderModule(in->var0.device, "shader/tese.spv");
     VkShaderModule fragmentShaderModule = LoadShaderModule(in->var0.device, "shader/frag.spv");
 
-    uint32_t nPipelineStages = 2;
+    uint32_t nPipelineStages = 4;
     VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[] = {
       {
         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -288,6 +337,24 @@ void RootNodeAssetReload(Node * node)
         0,
         VK_SHADER_STAGE_VERTEX_BIT,
         vertexShaderModule,
+        "main",
+        NULL
+      },
+      {
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        NULL,
+        0,
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        tessellationControlShaderModule,
+        "main",
+        NULL
+      },
+      {
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        NULL,
+        0,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        tessellationEvaluationShaderModule,
         "main",
         NULL
       },
@@ -314,8 +381,14 @@ void RootNodeAssetReload(Node * node)
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
       NULL,
       0,
-      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+      VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
       VK_FALSE
+    };
+    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo = {
+      VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+      NULL,
+      0,
+      4
     };
     const VkViewport viewport =
     {
@@ -369,6 +442,21 @@ void RootNodeAssetReload(Node * node)
       VK_FALSE
     };
 
+    const VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      NULL,
+      0,
+      VK_TRUE,
+      VK_TRUE,
+      VK_COMPARE_OP_LESS,
+      VK_FALSE,
+      VK_FALSE,
+      {0,0,0,0,0,0,0},
+      {0,0,0,0,0,0,0},
+      0.0f,
+      1.0f
+    };
+
     VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {
       VK_FALSE,
       VK_BLEND_FACTOR_ONE,
@@ -404,10 +492,12 @@ void RootNodeAssetReload(Node * node)
         dynamicStates
     };
   
-    VkPushConstantRange pushConstantRange = {
-      VK_SHADER_STAGE_VERTEX_BIT,
-      0,
-      16*sizeof(float)
+    VkPushConstantRange pushConstantRange[] = {
+      {
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        0,
+        24*sizeof(float)
+      }
     };
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -416,7 +506,7 @@ void RootNodeAssetReload(Node * node)
       0,
       NULL,
       1,
-      &pushConstantRange
+      pushConstantRange
     };
     if (VK_SUCCESS !=
 	pfnCreatePipelineLayout(in->var0.device,
@@ -434,11 +524,11 @@ void RootNodeAssetReload(Node * node)
       pipelineShaderStageCreateInfo,
       &vertexInputStateCreateInfo,
       &inputAssemblyStateCreateInfo,
-      NULL,
+      &tessellationStateCreateInfo,
       &viewportStateCreateInfo,
       &rasterizationStateCreateInfo,
       &multisampleStateCreateInfo,
-      NULL,
+      &depthStencilStateCreateInfo,
       &colorBlendStateCreateInfo,
       &dynamicStateCreateInfo,
       out->pipelineLayout,
@@ -453,6 +543,8 @@ void RootNodeAssetReload(Node * node)
     else printf("Pipeline creation succeeded\n");
 
     pfnDestroyShaderModule(in->var0.device, fragmentShaderModule, NULL);
+    pfnDestroyShaderModule(in->var0.device, tessellationControlShaderModule, NULL);
+    pfnDestroyShaderModule(in->var0.device, tessellationEvaluationShaderModule, NULL);
     pfnDestroyShaderModule(in->var0.device, vertexShaderModule, NULL);
   } /// End main pass pipeline creation
 }
@@ -471,9 +563,11 @@ void UpdateRootNode(Node * node)
 			 &imageNext);
 
   {
-  VkClearColorValue clearColorValue = {{1.0f, 0.0f, 0.0f, 1.0f}};
-  VkClearValue clearColor;
-  clearColor.color = clearColorValue;
+  VkClearColorValue clearColorValue = {{0.3f, 0.3f, 1.0f, 1.0f}};
+  VkClearDepthStencilValue clearDepth = {1.0f, 0};
+  VkClearValue clearColor[2];
+  clearColor[0].color = clearColorValue;
+  clearColor[1].depthStencil = clearDepth;
   VkCommandBufferBeginInfo commandBufferBeginInfo = {
     VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     0,
@@ -486,20 +580,66 @@ void UpdateRootNode(Node * node)
     in->var1.handle,
     NULL,
     {{0,0},{in->var1.windowSize.width,in->var1.windowSize.height}},
-    1,
-    &clearColor
+    2,
+    clearColor
   };
     renderPassBeginInfo.framebuffer = in->var1.framebuffers[imageNext];
 
     pfnBeginCommandBuffer(in->var1.commandBuffers[imageNext], &commandBufferBeginInfo);
+
+    /// todo: Simplify this and make it so that it only gets updated when needed
+    if (in->var4.left)
+      in->var1.rotationY += in->var2;
+    if (in->var4.right)
+      in->var1.rotationY -= in->var2;
+    while (in->var1.rotationY > 2*M_PI)
+      in->var1.rotationY -= 2*M_PI;
+    while (in->var1.rotationY < -2*M_PI)
+      in->var1.rotationY += 2*M_PI;
+    if (in->var4.up)
+      in->var1.rotationX += in->var2;
+    if (in->var4.down)
+      in->var1.rotationX -= in->var2;
+    if (in->var1.rotationX > M_PI*0.5)
+      in->var1.rotationX = M_PI*0.5;
+    if (in->var1.rotationX < -M_PI*0.5)
+      in->var1.rotationX = -M_PI*0.5;
+
+    in->var1.rotation[0] = (float)cos((float)in->var1.rotationY);
+    in->var1.rotation[1] = (float)sin((float)in->var1.rotationY);
+    in->var1.rotation[2] = (float)sin((float)in->var1.rotationX);
+    in->var1.rotation[3] = (float)cos((float)in->var1.rotationX);
+    if (in->var4.a) {
+      in->var1.location[0] -= in->var2 * in->var1.rotation[0];
+      in->var1.location[1] -= in->var2 * in->var1.rotation[1];
+    }
+    if (in->var4.d) {
+      in->var1.location[0] += in->var2 * in->var1.rotation[0];
+      in->var1.location[1] += in->var2 * in->var1.rotation[1];
+    }
+    if (in->var4.w) {
+      in->var1.location[0] -= in->var2 * in->var1.rotation[1] * in->var1.rotation[3];
+      in->var1.location[1] -= in->var2 * -in->var1.rotation[0] * in->var1.rotation[3];
+      in->var1.location[2] -= in->var2 * in->var1.rotation[2];
+    }
+    if (in->var4.s) {
+      in->var1.location[0] += in->var2 * in->var1.rotation[1] * in->var1.rotation[3];
+      in->var1.location[1] += in->var2 * -in->var1.rotation[0] * in->var1.rotation[3];
+      in->var1.location[2] += in->var2 * in->var1.rotation[2];
+    }
+    
     pfnCmdPushConstants(in->var1.commandBuffers[imageNext],
 			in->var1.pipelineLayout,
-			VK_SHADER_STAGE_VERTEX_BIT,
+			VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
 			0,
-			16*sizeof(float),
-			in->var1.projMatrix);
-    pfnCmdBeginRenderPass(in->var1.commandBuffers[imageNext], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    pfnCmdBindPipeline(in->var1.commandBuffers[imageNext], VK_PIPELINE_BIND_POINT_GRAPHICS, in->var1.pipeline);
+			24*sizeof(float),
+			in->var1.projMatAndLoc);
+    pfnCmdBeginRenderPass(in->var1.commandBuffers[imageNext],
+			  &renderPassBeginInfo,
+			  VK_SUBPASS_CONTENTS_INLINE);
+    pfnCmdBindPipeline(in->var1.commandBuffers[imageNext],
+		       VK_PIPELINE_BIND_POINT_GRAPHICS,
+		       in->var1.pipeline);
     pfnCmdDraw(in->var1.commandBuffers[imageNext], 4, 1, 0, 0);
     pfnCmdEndRenderPass(in->var1.commandBuffers[imageNext]);
     if (VK_SUCCESS != pfnEndCommandBuffer(in->var1.commandBuffers[imageNext]))
