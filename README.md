@@ -6,6 +6,7 @@ Currently there's one example application that showcases the capabilities of thi
 On the to-do list is also making the folder structure clearer and dividing the project into engine code and application-specific code.
 
 Build instructions:
+
 cmake .
 
 make
