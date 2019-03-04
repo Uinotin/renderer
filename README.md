@@ -20,3 +20,10 @@ glslangValidator -V landscape.tesc
 glslangValidator -V landscape.tese
 
 glslangValidator -V landscape.frag
+
+
+Landscape demo controls:
+
+wasd - move
+
+arrow keys - rotate view
