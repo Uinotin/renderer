@@ -1,6 +1,4 @@
 cmake_minimum_required(VERSION 3.2)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -pedantic -std=gnu99 -Werror -Wmissing-prototypes -Wstrict-prototypes -Wno-unused-parameter")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -save-temps -D_DEBUG -DNDEBUG")
 add_executable(example main.c)
-target_link_libraries(example glfw)
-#target_include_directories(example PRIVATE ../renderer)
+target_include_directories(example PRIVATE ../renderer)
+target_link_libraries(example glfw renderer)
