@@ -70,6 +70,5 @@ int main(int argv, char * argc[])
   }
   FreeDdsData(&dds);
   FreeDib(&dib);
-
   return 1;
 }

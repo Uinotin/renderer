@@ -57,6 +57,7 @@ void GenerateDibFromDds(Dib * dib, const Dds * dds)
   }
 }
 
+
 void GenerateDdsFromDib(Dds * dds, const Dib * dib)
 {
   int reverseHeight = dib->height > 0;
