@@ -94,7 +94,7 @@ int WriteBmp(Dib * dib, const char * filename)
     printf("Error: Output file already exists\n");
     return 0;
   }
-  char zero = 0;
+  uint8_t zero[16] = {0};
   BmpHeader bmpHeader;
   bmpHeader.id[0] = 'B';
   bmpHeader.id[1] = 'M';
@@ -109,7 +109,7 @@ int WriteBmp(Dib * dib, const char * filename)
   }
   writeInt(file, bmpHeader.id, 2);
   writeInt(file, &(bmpHeader.size), 4);
-  fwrite(&zero, 1, 4, file);
+  fwrite(zero, 1, 4, file);
   writeInt(file, &(bmpHeader.offsetToData), 4);
   writeInt(file, &(dib->headerSize), 4);
   writeInt(file, &(dib->width), 4);

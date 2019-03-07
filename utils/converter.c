@@ -2,6 +2,8 @@
 #include <string.h>
 #include "converter.h"
 
+/// This function converts a DXT1-compressed DDS
+/// into a DIB (BMP file)
 void GenerateDibFromDds(Dib * dib, const Dds * dds)
 {
   dib->headerSize = 40;
@@ -57,7 +59,8 @@ void GenerateDibFromDds(Dib * dib, const Dds * dds)
   }
 }
 
-
+/// This function compresses an image in DIB format(BMP file)
+/// into a DDS file.
 void GenerateDdsFromDib(Dds * dds, const Dib * dib)
 {
   int reverseHeight = dib->height > 0;
@@ -78,9 +81,10 @@ void GenerateDdsFromDib(Dds * dds, const Dib * dib)
   dds->pixelFormat.id[1] = 'X';
   dds->pixelFormat.id[2] = 'T';
   dds->pixelFormat.id[3] = '1';
-  dds->pixelFormat.rBitMask = 0xff0000;
-  dds->pixelFormat.gBitMask = 0xff00;
-  dds->pixelFormat.bBitMask = 0xff;
+  dds->pixelFormat.rgbBitCount = 0x0;
+  dds->pixelFormat.rBitMask = 0x0;
+  dds->pixelFormat.gBitMask = 0x0;
+  dds->pixelFormat.bBitMask = 0x0;
   dds->pixelFormat.aBitMask = 0x0;
   dds->caps = 0x1000;
   dds->caps2 = 0x0;
@@ -91,6 +95,10 @@ void GenerateDdsFromDib(Dds * dds, const Dib * dib)
   uint32_t height = dds->height;
   const uint8_t *restrict dibBlock[4];
   uint8_t *restrict ddsBlock = (uint8_t *)dds->data;
+  /// The algorithm goes through every 4x4 block in the texture
+  /// and generates colours the two block colours based on the following logic:
+  /// color0 = (blockAverateColor + darkestColorInBlock * 2)/3
+  /// color1 = (blockAverateColor + lightestColorInBlock * 2)/3
   for (uint32_t i = 0; i < height; i += 4) {
     uint32_t heightOffset = reverseHeight ? height - i - 4 : i;
     dibBlock[0] = (uint8_t *)dib->data + dibWidthInBytes * (0+heightOffset);
@@ -105,6 +113,7 @@ void GenerateDdsFromDib(Dds * dds, const Dib * dib)
       uint32_t colorAverage[3] = {0};
       uint32_t minColorVal = 768;
       uint32_t maxColorVal = 0;
+      /// Find darkest and lightest colors and calculate average color
       for (uint32_t columnIndex = 0; columnIndex < 4; ++columnIndex)
         for (uint32_t rowIndex = 0; rowIndex < 4; ++rowIndex) {
           uint32_t dibColorVal = (uint32_t)dibBlock[columnIndex][j+rowIndex*3 + 0] +
@@ -137,20 +146,36 @@ void GenerateDdsFromDib(Dds * dds, const Dib * dib)
       colors[1][1] = (uint8_t)(((uint32_t)maxColor[1] * 2 + colorAverage[1])/3);
       colors[1][2] = (uint8_t)(((uint32_t)maxColor[2] * 2 + colorAverage[2])/3);
 
+      uint16_t * ddsBlockColors = (uint16_t *)ddsBlock;
+      ddsBlockColors[0] = ((uint16_t)colors[0][0])*31/255 << 0 |
+	                  ((uint16_t)colors[0][1])*63/255 << 5 |
+	                  ((uint16_t)colors[0][2])*31/255 << 11;
+      ddsBlockColors[1] = ((uint16_t)colors[1][0])*31/255 << 0 |
+	                  ((uint16_t)colors[1][1])*63/255 << 5 |
+	                  ((uint16_t)colors[1][2])*31/255 << 11;
+      /// Make sure that first color in the block has a higher value as uint16_t
+      if(ddsBlockColors[0] < ddsBlockColors[1]) {
+	uint16_t temp = ddsBlockColors[0];
+	ddsBlockColors[0] = ddsBlockColors[1];
+	ddsBlockColors[1] = temp;
+	uint8_t tempColor[3];
+	memcpy(tempColor, colors[0], 3);
+	memcpy(colors[0], colors[1], 3);
+	memcpy(colors[1], tempColor, 3);
+      } else if (ddsBlockColors[0] == ddsBlockColors[1]) {
+	if (*ddsBlockColors != 0xffff)
+	  ddsBlockColors[0]++;
+	else ddsBlockColors[1]--;
+      }
+
       colors[2][0] = (uint8_t)(((uint16_t)colors[0][0] * 2 + (uint16_t)colors[1][0])/3);
       colors[2][1] = (uint8_t)(((uint16_t)colors[0][1] * 2 + (uint16_t)colors[1][1])/3);
       colors[2][2] = (uint8_t)(((uint16_t)colors[0][2] * 2 + (uint16_t)colors[1][2])/3);
       colors[3][0] = (uint8_t)(((uint16_t)colors[0][0] + (uint16_t)colors[1][0] * 2)/3);
       colors[3][1] = (uint8_t)(((uint16_t)colors[0][1] + (uint16_t)colors[1][1] * 2)/3);
       colors[3][2] = (uint8_t)(((uint16_t)colors[0][2] + (uint16_t)colors[1][2] * 2)/3);
-      
-      *((uint16_t *)ddsBlock) = ((uint16_t)colors[0][0])*31/255 << 0 |
-	                        ((uint16_t)colors[0][1])*63/255 << 5 |
-	                        ((uint16_t)colors[0][2])*31/255 << 11;
-      *(((uint16_t *)ddsBlock)+1) = ((uint16_t)colors[1][0])*31/255 << 0 |
-	                            ((uint16_t)colors[1][1])*63/255 << 5 |
-	                            ((uint16_t)colors[1][2])*31/255 << 11;
       ddsBlock += 4;
+      /// Find the closest matching colour for each pixel in the block
       for (uint32_t columnIndex = 0; columnIndex < 4; ++columnIndex) {
 	ddsBlock[reverseHeight ? 3 - columnIndex : columnIndex] = 0;
         for (uint32_t rowIndex = 0; rowIndex < 4; ++rowIndex) {

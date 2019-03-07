@@ -103,7 +103,7 @@ int LoadDds(Dds * dds, const char * filename)
 }
 int WriteDds(Dds * dds, const char * filename)
 {
-  char zero = 0;
+  uint8_t zero[11*4] = {0};
   if (access(filename, F_OK) != -1) {
     printf("Error: Output file already exists\n");
     return 0;
@@ -127,7 +127,7 @@ int WriteDds(Dds * dds, const char * filename)
   writeInt(file, &(dds->depth), 4);
   writeInt(file, &(dds->mipMapCount), 4);
 
-  fwrite(&zero, 1, 11*4, file);
+  fwrite(zero, 1, 11*4, file);
   
   writeInt(file, &(dds->pixelFormat.size), 4);
   writeInt(file, &(dds->pixelFormat.flags), 4);
@@ -140,7 +140,7 @@ int WriteDds(Dds * dds, const char * filename)
 
   writeInt(file, &(dds->caps), 4);
   writeInt(file, &(dds->caps2), 4);
-  fwrite(&zero, 1, 3*4, file);
+  fwrite(zero, 1, 3*4, file);
 
   fwrite(dds->data, dds->pitchOrLinearSize, 1, file);
   fclose(file);
