@@ -93,12 +93,12 @@ void GenerateDdsFromDib(Dds * dds, const Dib * dib)
   
   uint32_t dibWidthInBytes = dds->width * 3;
   uint32_t height = dds->height;
-  const uint8_t *restrict dibBlock[4];
-  uint8_t *restrict ddsBlock = (uint8_t *)dds->data;
+  const uint8_t * dibBlock[4];
+  uint8_t * ddsBlock = (uint8_t *)dds->data;
   /// The algorithm goes through every 4x4 block in the texture
   /// and generates colours the two block colours based on the following logic:
-  /// color0 = (blockAverateColor + darkestColorInBlock * 2)/3
-  /// color1 = (blockAverateColor + lightestColorInBlock * 2)/3
+  /// color0 = (blockAverageColor + darkestColorInBlock * 2)/3
+  /// color1 = (blockAverageColor + lightestColorInBlock * 2)/3
   for (uint32_t i = 0; i < height; i += 4) {
     uint32_t heightOffset = reverseHeight ? height - i - 4 : i;
     dibBlock[0] = (uint8_t *)dib->data + dibWidthInBytes * (0+heightOffset);

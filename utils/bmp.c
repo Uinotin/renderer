@@ -22,7 +22,10 @@ static int SanityCheck(BmpHeader * header, Dib * dib)
 	   header->id[0], header->id[1]);
     return 0;
   }
-  
+  if(((dib->height % 4) + (dib->width % 4)) || dib->width < 4 || dib->height < 4) {
+    printf("Error: Dimensions are not divisable by 4\n");
+    return 0;
+  }
   if(dib->bitsPerPixel != 24) {
     printf("Error: Bits per pixel is: %u\nOnly 24bpp files are supported\n",
 	   dib->bitsPerPixel);

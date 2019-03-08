@@ -33,7 +33,7 @@ static int SanityCheck(Dds * dds)
     printf("Error: Image dimensions are too large\n");
     return 0;
   }
-  if(((dds->height % 4) + (dds->width % 4))) {
+  if(((dds->height % 4) + (dds->width % 4)) || dds->width < 4 || dds->height < 4) {
     printf("Error: Dimensions are not divisable by 4\n");
     return 0;
   }
