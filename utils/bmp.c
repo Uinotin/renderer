@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include "bmp.h"
 
 typedef struct BmpHeader
@@ -90,10 +89,6 @@ int LoadBmp(Dib * dib, const char * filename)
 
 int WriteBmp(Dib * dib, const char * filename)
 {
-  if (access(filename, F_OK) != -1) {
-    printf("Error: Output file already exists\n");
-    return 0;
-  }
   uint8_t zero[16] = {0};
   BmpHeader bmpHeader;
   bmpHeader.id[0] = 'B';

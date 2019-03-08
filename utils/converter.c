@@ -22,8 +22,8 @@ void GenerateDibFromDds(Dib * dib, const Dds * dds)
 
   uint32_t width = dds->width;
   uint32_t height = dds->height;
-  char *restrict dibBlock[4];
-  const char *restrict ddsBlock = (const char *)dds->data;
+  char * dibBlock[4];
+  const char * ddsBlock = (const char *)dds->data;
   for (uint32_t i = 0; i < height; i += 4) {
     dibBlock[0] = (char *)(dib->data) + width * 3 * i;
     dibBlock[1] = (char *)(dib->data) + width * 3 * (1+i);

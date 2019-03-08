@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include "dds.h"
 #include "readutils.h"
 static void PrintDds(Dds * dds)
@@ -104,11 +103,6 @@ int LoadDds(Dds * dds, const char * filename)
 int WriteDds(Dds * dds, const char * filename)
 {
   uint8_t zero[11*4] = {0};
-  if (access(filename, F_OK) != -1) {
-    printf("Error: Output file already exists\n");
-    return 0;
-  }
-
   FILE * file = fopen(filename, "wb");
   if (!file) {
     printf("Error: Could not open file %s\n", filename);
