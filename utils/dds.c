@@ -51,7 +51,7 @@ static int SanityCheck(Dds * dds)
     printf("Error: Pixel format is not DXT1\n");
     return 0;
   }
-  if(dds->pitchOrLinearSize > MAX_IMAGE_SIZE) {
+  if(dds->pitchOrLinearSize > MAX_IMAGE_SIZE/2) {
     return 0;
   }
   return 1;
@@ -109,6 +109,7 @@ int WriteDds(Dds * dds, const char * filename)
     return 0;
   }
 
+  PrintDds(dds);
   if (!SanityCheck(dds))
     return 0;
   char id[4] = { 'D', 'D', 'S', ' '};

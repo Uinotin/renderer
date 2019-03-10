@@ -22,7 +22,8 @@ static int SanityCheck(BmpHeader * header, Dib * dib)
 	   header->id[0], header->id[1]);
     return 0;
   }
-  if(((dib->height % 4) + (dib->width % 4)) || dib->width < 4 || dib->height < 4) {
+  uint32_t height = dib->height < 0 ? -dib->height : dib->height;
+  if(((dib->height % 4) + (dib->width % 4)) || dib->width < 4 || height < 4) {
     printf("Error: Dimensions are not divisable by 4\n");
     return 0;
   }
@@ -35,7 +36,7 @@ static int SanityCheck(BmpHeader * header, Dib * dib)
     printf("Error: Image size is bigger than the file size\n");
     return 0;
   }
-  if (dib->imageSize > MAX_IMAGE_SIZE) {
+  if (dib->imageSize > MAX_IMAGE_SIZE*3) {
     printf("Error: Image size is too big\n");
     return 0;
   }
@@ -83,9 +84,11 @@ int LoadBmp(Dib * dib, const char * filename)
     fclose(file);
     return 0;
   }
-  dib->data = (char *)malloc(dib->imageSize);
+  int32_t height = dib->height < 0 ? -dib->height : dib->height;
+  int32_t imageSize = height * dib->width * 3;
+  dib->data = (void *)malloc(imageSize);
   fseek(file, bmpHeader.offsetToData, SEEK_SET);
-  fread(dib->data, dib->imageSize, 1, file);
+  fread(dib->data, imageSize, 1, file);
   fclose(file);
   return 1;
 }
@@ -97,7 +100,8 @@ int WriteBmp(Dib * dib, const char * filename)
   bmpHeader.id[0] = 'B';
   bmpHeader.id[1] = 'M';
   bmpHeader.offsetToData = 14 + dib->headerSize;
-  bmpHeader.size = bmpHeader.offsetToData + dib->imageSize;
+  int32_t height = dib->height < 0 ? -dib->height : dib->height;
+  bmpHeader.size = bmpHeader.offsetToData + height * dib->width * 3;
   if (!SanityCheck(&bmpHeader, dib))
     return 0;
   FILE * file = fopen(filename, "wb");
