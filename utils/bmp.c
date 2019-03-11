@@ -101,7 +101,8 @@ int WriteBmp(Dib * dib, const char * filename)
   bmpHeader.id[1] = 'M';
   bmpHeader.offsetToData = 14 + dib->headerSize;
   int32_t height = dib->height < 0 ? -dib->height : dib->height;
-  bmpHeader.size = bmpHeader.offsetToData + height * dib->width * 3;
+  int32_t imageSize = height * dib->width * 3;
+  bmpHeader.size = bmpHeader.offsetToData + imageSize;
   if (!SanityCheck(&bmpHeader, dib))
     return 0;
   FILE * file = fopen(filename, "wb");
@@ -135,7 +136,7 @@ int WriteBmp(Dib * dib, const char * filename)
     writeInt(file, &(dib->blueGamma), 4);
   }
   fseek(file, bmpHeader.offsetToData, SEEK_SET);
-  fwrite(dib->data, dib->imageSize, 1, file);
+  fwrite(dib->data, imageSize, 1, file);
   fclose(file);
   return 1;
 }
